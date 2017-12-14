@@ -32,16 +32,29 @@ sysctl -w net.ipv4.tcp_tw_reuse=1
 # minimize TCP connection timeout so application layer timeouts are quicker to test.
 sysctl -w net.ipv4.tcp_syn_retries=4
 
+
+# Add local user
+# Either use the LOCAL_USER_ID if passed in at runtime or 1000
+USER_ID=${LOCAL_USER_ID:-1000}
+GROUP_ID=${LOCAL_GROUP_ID:-1000}
+export HOME=/home/faucet
+addgroup --gid $GROUP_ID faucet >/dev/null 2>&1 || true
+adduser --uid $USER_ID --gid $GROUP_ID \
+  --gecos "" --home $HOME --disabled-password faucet >/dev/null 2>&1 || true
+RUNAS_FAUCET="sudo -u faucet"
+chown -R faucet:faucet /faucet-src/
+chown -R faucet:faucet /var/log/ryu/faucet/
+
 cd /faucet-src/tests
 
 if [ "$DEPCHECK" == 1 ] ; then
     echo "============ Running pytype analyzer ============"
     # TODO: pytype doesn't completely understand py3 yet.
-    ls -1 ../faucet/*py | parallel pytype -d import-error || exit 1
+    ls -1 ../faucet/*py | parallel $RUNAS_FAUCET pytype -d import-error || exit 1
 fi
 
 echo "========== Running faucet unit tests =========="
-python3 -m pytest ./test_*.py --cov faucet --doctest-modules -v --cov-report term-missing || exit 1
+$RUNAS_FAUCET python3 -m pytest ./test_*.py --cov faucet --doctest-modules -v --cov-report term-missing || exit 1
 
 echo "========== Running faucet system tests =========="
 python2 ./faucet_mininet_test.py -c

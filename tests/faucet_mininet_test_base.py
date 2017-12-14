@@ -198,6 +198,7 @@ class FaucetTestBase(unittest.TestCase):
     def _tmpdir_name(self):
         tmpdir = os.path.join(self.root_tmpdir, self._test_name())
         os.mkdir(tmpdir)
+        os.chown(tmpdir, 1000, 1000)
         return tmpdir
 
     def _controller_lognames(self):
