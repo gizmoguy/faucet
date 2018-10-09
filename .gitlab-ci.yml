@@ -9,9 +9,10 @@ build-package:
   script:
     - apt-get update && apt-get upgrade -y
     - mk-build-deps -i -r -t 'apt-get -f -y --force-yes'
+    - apt-get install -y python3-pip && pip3 install -r test-requirements.txt
     - export DEBEMAIL='maintainers@faucet.nz' && export DEBFULLNAME='Faucet Maintainers'
     - debchange --newversion ${CI_COMMIT_REF_NAME} -b "New upstream release"
-    - fakeroot debian/rules binary
+    - dpkg-buildpackage -b -us -uc -rfakeroot
     - mkdir built-packages || true
     - mv ../*.deb built-packages/
   artifacts:
