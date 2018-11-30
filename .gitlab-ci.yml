@@ -7,6 +7,7 @@ build-package:
   stage: build-package
   image: faucet/dbuilder
   script:
+    - curl -s https://packagecloud.io/install/repositories/faucetsdn/faucet-test/script.deb.sh | sudo bash
     - apt-get update && apt-get upgrade -y
     - mk-build-deps -i -r -t 'apt-get -f -y --force-yes'
     - export DEBEMAIL='maintainers@faucet.nz' && export DEBFULLNAME='Faucet Maintainers'
