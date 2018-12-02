@@ -36,14 +36,19 @@ class ConfigWatcher:
         # TODO: Better to use an inotify method that doesn't conflict with eventlets.
         changed = False
         if self.config_hashes:
+            print("1")
             new_config_file_stats = stat_config_files(self.config_hashes)
             if self.config_file_stats:
+                print("2")
                 # Check content as well in case mtime et al was cached.
                 if new_config_file_stats == self.config_file_stats:
+                    print("3")
                     changed = self.content_changed(self.config_file)
                 else:
+                    print("4")
                     changed = True
             self.config_file_stats = new_config_file_stats
+            print("5")
         return changed
 
     def content_changed(self, new_config_file):
