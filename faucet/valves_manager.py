@@ -36,10 +36,15 @@ class ConfigWatcher:
         # TODO: Better to use an inotify method that doesn't conflict with eventlets.
         changed = False
         if self.config_hashes:
+            print("1")
             new_config_file_stats = stat_config_files(self.config_hashes)
             if self.config_file_stats:
+                print("2")
                 if new_config_file_stats != self.config_file_stats:
+                    print("3")
                     changed = True
+                print("4")
+            print("5")
             self.config_file_stats = new_config_file_stats
         return changed
 

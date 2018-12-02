@@ -438,7 +438,7 @@ class ValveTestBases:
             with open(self.config_file, 'w') as config_file:
                 config_file.write(config)
             if existing_config:
-                self.assertFalse(self.valves_manager.config_watcher.files_changed())
+                self.assertTrue(self.valves_manager.config_watcher.files_changed())
             self.last_flows_to_dp[self.DP_ID] = []
             var = 'faucet_config_reload_%s_total' % reload_type
             self.prom_inc(
