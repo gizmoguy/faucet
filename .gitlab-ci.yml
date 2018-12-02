@@ -10,8 +10,7 @@ build-package:
     - curl -s https://packagecloud.io/install/repositories/faucetsdn/faucet-test/script.deb.sh | bash
     - apt-get update && apt-get upgrade -y
     - mk-build-deps -i -r -t 'apt-get -f -y --force-yes'
-    - apt-get -y install python3-pip && pip3 install coverage
-    - PYTHONPATH=. python3 ./tests/unit/faucet/test_valve.py -vf
+    - PYTHONPATH=. python3 ./tests/unit/faucet/test_valve2.py -vf
     - export DEBEMAIL='maintainers@faucet.nz' && export DEBFULLNAME='Faucet Maintainers'
     - debchange --newversion ${CI_COMMIT_REF_NAME} -b "New upstream release"
     - dpkg-buildpackage -b -us -uc -rfakeroot
