@@ -721,7 +721,9 @@ dps:
 
     def test_change_port_acl(self):
         """Test port ACL can be changed."""
+        print("self.update_config(self.SAME_CONTENT_CONFIG, reload_type='warm')")
         self.update_config(self.SAME_CONTENT_CONFIG, reload_type='warm')
+        print("self.update_config(self.DIFF_CONTENT_CONFIG, reload_type='warm')")
         self.update_config(self.DIFF_CONTENT_CONFIG, reload_type='warm')
 
 
