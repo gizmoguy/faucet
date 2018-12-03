@@ -435,7 +435,6 @@ class ValveTestBases:
             """Update FAUCET config with config as text."""
             before_dp_status = int(self.get_prom('dp_status'))
             print("self.assertFalse(self.valves_manager.config_watcher.files_changed())")
-            self.assertFalse(self.valves_manager.config_watcher.content_changed())
             self.assertFalse(self.valves_manager.config_watcher.files_changed())
             existing_config = os.path.exists(self.config_file)
 
@@ -449,7 +448,6 @@ class ValveTestBases:
                 with open(self.config_file) as config_file:
                     print("NEW HASH OF %s: %s" % (self.config_file, hashlib.sha256(config_file.read().encode('utf-8')).hexdigest()))
                 print("self.assertTrue(self.valves_manager.config_watcher.files_changed())")
-                self.assertTrue(self.valves_manager.config_watcher.content_changed())
                 self.assertTrue(self.valves_manager.config_watcher.files_changed())
             self.last_flows_to_dp[self.DP_ID] = []
             var = 'faucet_config_reload_%s_total' % reload_type
