@@ -437,8 +437,9 @@ class ValveTestBases:
             self.assertFalse(self.valves_manager.config_watcher.files_changed())
             existing_config = os.path.exists(self.config_file)
 
-            with open(self.config_file) as config_file:
-                print("OLD HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest())
+            if existing_config:
+                with open(self.config_file) as config_file:
+                    print("OLD HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest())
 
             with open(self.config_file, 'w') as config_file:
                 config_file.write(config)
