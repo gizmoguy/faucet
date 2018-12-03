@@ -438,13 +438,13 @@ class ValveTestBases:
             existing_config = os.path.exists(self.config_file)
 
             with open(self.config_file) as config_file:
-                print("OLD HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest()
+                print("OLD HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest())
 
             with open(self.config_file, 'w') as config_file:
                 config_file.write(config)
             if existing_config:
                 with open(self.config_file) as config_file:
-                    print("NEW HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest()
+                    print("NEW HASH: %s" % hashlib.sha256(config_file.read().encode('utf-8')).hexdigest())
                 print("self.assertTrue(self.valves_manager.config_watcher.files_changed())")
                 self.assertTrue(self.valves_manager.config_watcher.files_changed())
             self.last_flows_to_dp[self.DP_ID] = []
