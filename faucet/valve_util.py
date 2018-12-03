@@ -183,4 +183,5 @@ def stat_config_files(config_hashes):
             config_file_stat.st_size,
             config_file_stat.st_mtime,
             config_file_stat.st_ctime)
+    print(config_file_stat)
     return config_files_stats
