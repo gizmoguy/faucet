@@ -36,6 +36,10 @@ class ConfigWatcher:
         # TODO: Better to use an inotify method that doesn't conflict with eventlets.
         changed = False
         if self.config_hashes:
+            for f in self.config_hashes:
+                with open(f) as config_file:
+                    print("HASH OF %s: %s" % (self.config_file, hashlib.sha256(config_file.read().encode('utf-8')).hexdigest()))
+
             new_config_file_stats = stat_config_files(self.config_hashes)
             print("self.config_hashes: %s" % self.config_hashes)
             if self.config_file_stats:
