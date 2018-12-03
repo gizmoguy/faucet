@@ -352,7 +352,7 @@ class ValveTestBases:
 
         def setup_valve(self, config):
             """Set up test DP with config."""
-            self.tmpdir = tempfile.mkdtemp()
+            self.tmpdir = tempfile.mkdtemp(dir="/builds/gizmoguy/faucet/tmp/")
             self.config_file = os.path.join(self.tmpdir, 'valve_unit.yaml')
             self.faucet_event_sock = os.path.join(self.tmpdir, 'event.sock')
             self.table = FakeOFTable(self.NUM_TABLES)
