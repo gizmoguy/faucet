@@ -20,8 +20,6 @@ build-package:
     paths:
       - built-packages/*
     expire_in: 1 day
-  only:
-    - tags
 
 deploy-package:
   stage: deploy-package

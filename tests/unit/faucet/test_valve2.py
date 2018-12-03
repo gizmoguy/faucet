@@ -20,6 +20,7 @@
 from collections import namedtuple
 from functools import partial
 
+import hashlib
 import cProfile
 import io
 import ipaddress
