@@ -24,6 +24,8 @@ from faucet.valve import valve_factory, SUPPORTED_HARDWARE
 from faucet.valve_util import dpid_log, stat_config_files
 
 
+import hashlib
+
 class ConfigWatcher:
     """Watch config for file or content changes."""
 
