@@ -42,11 +42,11 @@ class ConfigWatcher:
             print(self.config_hashes)
             if self.config_file_stats:
                 print("2")
-                print("self.config_file_stats:")
-                print(self.config_file_stats)
                 if new_config_file_stats != self.config_file_stats:
                     print("3")
                     changed = True
+                else:
+                    print("%s == %s" % (new_config_file_stats, self.config_file_stats))
                 print("4")
             print("5")
             self.config_file_stats = new_config_file_stats
