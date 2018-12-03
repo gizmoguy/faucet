@@ -38,6 +38,8 @@ class ConfigWatcher:
         if self.config_hashes:
             print("1")
             new_config_file_stats = stat_config_files(self.config_hashes)
+            print("self.config_hashes:")
+            print(self.config_hashes)
             if self.config_file_stats:
                 print("2")
                 # Check content as well in case mtime et al was cached.
