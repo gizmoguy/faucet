@@ -172,19 +172,25 @@ def config_changed(top_config_file, new_top_config_file, config_hashes):
         bool: True if the file, or any file it includes, has changed.
     """
     if new_top_config_file != top_config_file:
+        print("* 1")
         return True
     if config_hashes is None or new_top_config_file is None:
+        print("* 2")
         return False
     for config_file, config_hash in config_hashes.items():
         config_file_exists = os.path.isfile(config_file)
         # Config file not loaded but exists = reload.
         if config_hash is None and config_file_exists:
+            print("* 3")
             return True
         # Config file loaded but no longer exists = reload.
         if config_hash and not config_file_exists:
+            print("* 4")
             return True
         # Config file hash has changed = reload.
         new_config_hash = config_file_hash(config_file)
         if new_config_hash != config_hash:
+            print("* 5")
             return True
+    print("* 6")
     return False
