@@ -183,14 +183,20 @@ def config_changed(top_config_file, new_top_config_file, config_hashes):
         if config_hash is None and config_file_exists:
             print("* 3")
             return True
+        else:
+            print("* 4")
         # Config file loaded but no longer exists = reload.
         if config_hash and not config_file_exists:
-            print("* 4")
+            print("* 5")
             return True
+        else:
+            print("* 6")
         # Config file hash has changed = reload.
         new_config_hash = config_file_hash(config_file)
         if new_config_hash != config_hash:
-            print("* 5")
+            print("* 7")
             return True
-    print("* 6")
+        else:
+            print("* 8")
+    print("* 9")
     return False

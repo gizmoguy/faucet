@@ -45,13 +45,10 @@ class ConfigWatcher:
             new_config_file_stats = stat_config_files(self.config_hashes)
             print("self.config_hashes: %s" % self.config_hashes)
             if self.config_file_stats:
-                print("2")
                 # Check content as well in case mtime et al was cached.
                 if new_config_file_stats == self.config_file_stats:
-                    print("3")
                     changed = self.content_changed(self.config_file)
                 else:
-                    print("4")
                     changed = True
             self.config_file_stats = new_config_file_stats
             print("5")
