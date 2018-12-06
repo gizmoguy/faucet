@@ -736,6 +736,14 @@ dps:
         print("self.update_config(self.DIFF_CONTENT_CONFIG, reload_type='warm')")
         self.update_config(self.DIFF_CONTENT_CONFIG, reload_type='warm')
 
+class ValveReloadConfigTestCase(ValveTestBases.ValveTestBig):
+    """Repeats the tests after a config reload."""
+
+    def setUp(self):
+        super(ValveReloadConfigTestCase, self).setUp()
+        self.flap_port(1)
+        self.update_config(CONFIG, reload_type='warm', reload_expected=False)
+
 
 if __name__ == "__main__":
     unittest.main() # pytype: disable=module-attr
