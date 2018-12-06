@@ -641,6 +641,784 @@ class ValveTestBases:
             self.valves_manager.update_metrics(now)
             return rcv_packet_ofmsgs
 
+    class ValveTestBig(ValveTestSmall):
+        """Test basic switching/L2/L3 functions."""
+
+        def setUp(self):
+            self.setup_valve(CONFIG)
+
+        def test_get_config_dict(self):
+            """Test API call for DP config."""
+            # TODO: test actual config contents.
+            self.assertTrue(self.valve.get_config_dict())
+            self.assertTrue(self.valve.dp.get_tables())
+
+        def test_notifier_socket_path(self):
+            """Test notifier socket path checker."""
+            new_path = os.path.join(self.tmpdir, 'new_path/new_socket')
+            self.assertEqual(self.notifier.check_path(new_path), new_path)
+            stale_socket = os.path.join(self.tmpdir, 'stale_socket')
+            with open(stale_socket, 'w') as stale_socket_file:
+                stale_socket_file.write('')
+            self.assertEqual(self.notifier.check_path(stale_socket), stale_socket)
+
+        def test_disconnect(self):
+            """Test disconnection of DP from controller."""
+            self.assertEqual(1, int(self.get_prom('dp_status')))
+            self.prom_inc(partial(self.valve.datapath_disconnect), 'of_dp_disconnections_total')
+            self.assertEqual(0, int(self.get_prom('dp_status')))
+
+        def test_unexpected_port(self):
+            """Test packet in from unexpected port."""
+            self.prom_inc(
+                partial(self.rcv_packet, 999, 0x100, {
+                    'eth_src': self.P1_V300_MAC,
+                    'eth_dst': self.UNKNOWN_MAC,
+                    'ipv4_src': '10.0.0.1',
+                    'ipv4_dst': '10.0.0.2'}),
+                'of_unexpected_packet_ins_total',
+                inc_expected=True)
+
+        def test_oferror(self):
+            """Test OFError handler."""
+            datapath = None
+            msg = valve_of.parser.OFPFlowMod(datapath=datapath)
+            msg.xid = 123
+            self.valve.recent_ofmsgs.append(msg)
+            test_error = valve_of.parser.OFPErrorMsg(datapath=datapath, msg=msg)
+            self.valve.oferror(test_error)
+
+        def test_tfm(self):
+            """Test TFM is sent."""
+            self.assertTrue(
+                isinstance(self.valve, TfmValve),
+                msg=type(self.valve))
+            discovered_up_ports = [port_no for port_no in range(1, self.NUM_PORTS + 1)]
+            flows = self.valve.datapath_connect(time.time(), discovered_up_ports)
+            tfm_flows = [
+                flow for flow in flows if isinstance(
+                    flow, valve_of.parser.OFPTableFeaturesStatsRequest)]
+            # TODO: verify TFM content.
+            self.assertTrue(tfm_flows)
+
+        def test_pkt_meta(self):
+            """Test bad fields in OFPacketIn."""
+            msg = parser.OFPPacketIn(datapath=None)
+            self.assertEqual(None, self.valve.parse_pkt_meta(msg))
+            msg.cookie = self.valve.dp.cookie
+            self.assertEqual(None, self.valve.parse_pkt_meta(msg))
+            msg.reason = valve_of.ofp.OFPR_ACTION
+            self.assertEqual(None, self.valve.parse_pkt_meta(msg))
+            msg.match = parser.OFPMatch(in_port=1)
+            self.assertEqual(None, self.valve.parse_pkt_meta(msg))
+            msg.data = b'1234'
+            self.assertEqual(None, self.valve.parse_pkt_meta(msg))
+
+        def test_loop_protect(self):
+            """Learn loop protection."""
+            for _ in range(2):
+                self.rcv_packet(1, 0x100, {
+                    'eth_src': self.P1_V100_MAC,
+                    'eth_dst': self.UNKNOWN_MAC,
+                    'ipv4_src': '10.0.0.1',
+                    'ipv4_dst': '10.0.0.2'})
+                self.rcv_packet(2, 0x100, {
+                    'eth_src': self.P1_V100_MAC,
+                    'eth_dst': self.UNKNOWN_MAC,
+                    'ipv4_src': '10.0.0.1',
+                    'ipv4_dst': '10.0.0.2',
+                    'vid': 0x100})
+
+        def test_lldp(self):
+            """Test LLDP reception."""
+            self.assertFalse(self.rcv_packet(1, 0, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': lldp.LLDP_MAC_NEAREST_BRIDGE,
+                'chassis_id': self.P1_V100_MAC,
+                'port_id': 1}))
+
+        def test_bogon_arp_for_controller(self):
+            """Bogon ARP request for controller VIP."""
+            replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': mac.BROADCAST_STR,
+                'arp_code': arp.ARP_REQUEST,
+                'arp_source_ip': '8.8.8.8',
+                'arp_target_ip': '10.0.0.254'})
+            # Must be no ARP reply to an ARP request not in our subnet.
+            self.assertFalse(self.packet_outs_from_flows(replies))
+
+        def test_arp_for_controller(self):
+            """ARP request for controller VIP."""
+            for _retries in range(3):
+                for arp_mac in (mac.BROADCAST_STR, self.valve.dp.vlans[0x100].faucet_mac):
+                    arp_replies = self.rcv_packet(1, 0x100, {
+                        'eth_src': self.P1_V100_MAC,
+                        'eth_dst': arp_mac,
+                        'arp_code': arp.ARP_REQUEST,
+                        'arp_source_ip': '10.0.0.1',
+                        'arp_target_ip': '10.0.0.254'})
+                    # TODO: check ARP reply is valid
+                    self.assertTrue(self.packet_outs_from_flows(arp_replies), msg=arp_mac)
+
+        def test_arp_reply_from_host(self):
+            """ARP reply for host."""
+            arp_replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': FAUCET_MAC,
+                'arp_code': arp.ARP_REPLY,
+                'arp_source_ip': '10.0.0.1',
+                'arp_target_ip': '10.0.0.254'})
+            # TODO: check ARP reply is valid
+            self.assertTrue(arp_replies)
+            self.assertFalse(self.packet_outs_from_flows(arp_replies))
+
+        def test_nd_for_controller(self):
+            """IPv6 ND for controller VIP."""
+            for dst_ip in (
+                    ipaddress.IPv6Address('fe80::1:254'),
+                    ipaddress.IPv6Address('fc00::1:254')):
+                nd_mac = valve_packet.ipv6_link_eth_mcast(dst_ip)
+                ip_gw_mcast = valve_packet.ipv6_solicited_node_from_ucast(dst_ip)
+                for _retries in range(3):
+                    nd_replies = self.rcv_packet(2, 0x200, {
+                        'eth_src': self.P2_V200_MAC,
+                        'eth_dst': nd_mac,
+                        'vid': 0x200,
+                        'ipv6_src': 'fc00::1:1',
+                        'ipv6_dst': str(ip_gw_mcast),
+                        'neighbor_solicit_ip': str(dst_ip)})
+                    # TODO: check reply NA is valid
+                    packet_outs = self.packet_outs_from_flows(nd_replies)
+                    self.assertTrue(packet_outs)
+
+        def test_nd_from_host(self):
+            """IPv6 NA from host."""
+            na_replies = self.rcv_packet(2, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': FAUCET_MAC,
+                'vid': 0x200,
+                'ipv6_src': 'fc00::1:1',
+                'ipv6_dst': 'fc00::1:254',
+                'neighbor_advert_ip': 'fc00::1:1'})
+            # TODO: check NA response flows are valid
+            self.assertTrue(na_replies)
+            self.assertFalse(self.packet_outs_from_flows(na_replies))
+
+        def test_ra_for_controller(self):
+            """IPv6 RA for controller."""
+            router_solicit_ip = 'ff02::2'
+            ra_replies = self.rcv_packet(2, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': '33:33:00:00:00:02',
+                'vid': 0x200,
+                'ipv6_src': 'fe80::1:1',
+                'ipv6_dst': router_solicit_ip,
+                'router_solicit_ip': router_solicit_ip})
+            # TODO: check RA is valid
+            self.assertTrue(self.packet_outs_from_flows(ra_replies))
+
+        def test_icmp_ping_controller(self):
+            """IPv4 ping controller VIP."""
+            echo_replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': FAUCET_MAC,
+                'vid': 0x100,
+                'ipv4_src': '10.0.0.1',
+                'ipv4_dst': '10.0.0.254',
+                'echo_request_data': bytes(
+                    'A'*8, encoding='UTF-8')}) # pytype: disable=wrong-keyword-args
+            # TODO: check ping response
+            self.assertTrue(self.packet_outs_from_flows(echo_replies))
+
+        def test_unresolved_route(self):
+            """Test unresolved route tries to resolve."""
+            ip_dst = ipaddress.IPv4Network('10.100.100.0/24')
+            ip_gw = ipaddress.IPv4Address('10.0.0.1')
+            valve_vlan = self.valve.dp.vlans[0x100]
+            route_add_replies = self.valve.add_route(
+                valve_vlan, ip_gw, ip_dst)
+            self.assertFalse(route_add_replies)
+            resolve_replies = self.valve.resolve_gateways(
+                time.time(), None)
+            self.assertFalse(resolve_replies)
+            resolve_replies = self.valve.resolve_gateways(
+                time.time() + 99, None)
+            self.assertTrue(resolve_replies)
+
+        def test_add_del_route(self):
+            """IPv4 add/del of a route."""
+            arp_replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': mac.BROADCAST_STR,
+                'arp_code': arp.ARP_REQUEST,
+                'arp_source_ip': '10.0.0.1',
+                'arp_target_ip': '10.0.0.254'})
+            # TODO: check ARP reply is valid
+            self.assertTrue(self.packet_outs_from_flows(arp_replies))
+            valve_vlan = self.valve.dp.vlans[0x100]
+            ip_dst = ipaddress.IPv4Network('10.100.100.0/24')
+            ip_gw = ipaddress.IPv4Address('10.0.0.1')
+            route_add_replies = self.valve.add_route(
+                valve_vlan, ip_gw, ip_dst)
+            # TODO: check add flows.
+            self.assertTrue(route_add_replies)
+            route_del_replies = self.valve.del_route(
+                valve_vlan, ip_dst)
+            # TODO: check del flows.
+            self.assertTrue(route_del_replies)
+
+        def test_host_ipv4_fib_route(self):
+            """Test learning a FIB rule for an IPv4 host."""
+            fib_route_replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vid': 0x100,
+                'ipv4_src': '10.0.0.2',
+                'ipv4_dst': '10.0.0.4',
+                'echo_request_data': bytes(
+                    'A'*8, encoding='UTF-8')}) # pytype: disable=wrong-keyword-args
+            # TODO: verify learning rule contents
+            # We want to know this host was learned we did not get packet outs.
+            self.assertTrue(fib_route_replies)
+            # Verify adding default route via 10.0.0.2
+            self.assertTrue((self.valve.add_route(
+                self.valve.dp.vlans[0x100],
+                ipaddress.IPv4Address('10.0.0.2'),
+                ipaddress.IPv4Network('0.0.0.0/0'))))
+            self.assertFalse(self.packet_outs_from_flows(fib_route_replies))
+            self.verify_expiry()
+
+        def test_host_ipv6_fib_route(self):
+            """Test learning a FIB rule for an IPv6 host."""
+            fib_route_replies = self.rcv_packet(2, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vid': 0x200,
+                'ipv6_src': 'fc00::1:2',
+                'ipv6_dst': 'fc00::1:4',
+                'echo_request_data': self.ICMP_PAYLOAD})
+            # TODO: verify learning rule contents
+            # We want to know this host was learned we did not get packet outs.
+            self.assertTrue(fib_route_replies)
+            self.assertFalse(self.packet_outs_from_flows(fib_route_replies))
+            self.verify_expiry()
+
+        def test_icmp_ping_unknown_neighbor(self):
+            """IPv4 ping unknown host on same subnet, causing proactive learning."""
+            echo_replies = self.rcv_packet(1, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': FAUCET_MAC,
+                'vid': 0x100,
+                'ipv4_src': '10.0.0.1',
+                'ipv4_dst': '10.0.0.99',
+                'echo_request_data': self.ICMP_PAYLOAD})
+            # TODO: check proactive neighbor resolution
+            self.assertTrue(self.packet_outs_from_flows(echo_replies))
+
+        def test_icmp_ping6_unknown_neighbor(self):
+            """IPv4 ping unknown host on same subnet, causing proactive learning."""
+            echo_replies = self.rcv_packet(2, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': FAUCET_MAC,
+                'vid': 0x200,
+                'ipv6_src': 'fc00::1:2',
+                'ipv6_dst': 'fc00::1:4',
+                'echo_request_data': self.ICMP_PAYLOAD})
+            # TODO: check proactive neighbor resolution
+            self.assertTrue(self.packet_outs_from_flows(echo_replies))
+
+        def test_icmpv6_ping_controller(self):
+            """IPv6 ping controller VIP."""
+            echo_replies = self.rcv_packet(2, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': FAUCET_MAC,
+                'vid': 0x200,
+                'ipv6_src': 'fc00::1:1',
+                'ipv6_dst': 'fc00::1:254',
+                'echo_request_data': self.ICMP_PAYLOAD})
+            # TODO: check ping response
+            self.assertTrue(self.packet_outs_from_flows(echo_replies))
+
+        def test_invalid_vlan(self):
+            """Test that packets with incorrect vlan tagging get dropped."""
+
+            matches = [
+                {'in_port': 1, 'vlan_vid': 18|ofp.OFPVID_PRESENT},
+                {'in_port': 1, 'vlan_vid': self.V100},
+                {'in_port': 3, 'vlan_vid': 0}]
+            for match in matches:
+                self.assertFalse(
+                    self.table.is_output(match),
+                    msg='Packets with incorrect vlan tags are output')
+
+        def test_unknown_eth_src(self):
+            """Test that packets from unknown macs are sent to controller.
+
+            Untagged packets should have VLAN tags pushed before they are sent to
+            the controller.
+            """
+            matches = [
+                {'in_port': 1, 'vlan_vid': 0},
+                {'in_port': 1, 'vlan_vid': 0, 'eth_src' : self.UNKNOWN_MAC},
+                {
+                    'in_port': 1,
+                    'vlan_vid': 0,
+                    'eth_src' : self.P2_V200_MAC
+                    },
+                {'in_port': 2, 'vlan_vid': 0, 'eth_dst' : self.UNKNOWN_MAC},
+                {'in_port': 2, 'vlan_vid': 0},
+                {
+                    'in_port': 2,
+                    'vlan_vid': self.V100,
+                    'eth_src' : self.P2_V200_MAC
+                    },
+                {
+                    'in_port': 2,
+                    'vlan_vid': self.V100,
+                    'eth_src' : self.UNKNOWN_MAC,
+                    'eth_dst' : self.P1_V100_MAC
+                    },
+                ]
+            for match in matches:
+                if match['vlan_vid'] != 0:
+                    vid = match['vlan_vid']
+                else:
+                    vid = self.valve.dp.get_native_vlan(match['in_port']).vid
+                    vid = vid|ofp.OFPVID_PRESENT
+                self.assertTrue(
+                    self.table.is_output(match, ofp.OFPP_CONTROLLER, vid=vid),
+                    msg="Packet with unknown ethernet src not sent to controller: "
+                    "{0}".format(match))
+
+        def test_unknown_eth_dst_rule(self):
+            """Test that packets with unkown eth dst addrs get flooded correctly.
+
+            They must be output to each port on the associated vlan, with the
+            correct vlan tagging. And they must not be forwarded to a port not
+            on the associated vlan
+            """
+            self.learn_hosts()
+            matches = [
+                {
+                    'in_port': 3,
+                    'vlan_vid': self.V100,
+                },
+                {
+                    'in_port': 2,
+                    'vlan_vid': 0,
+                    'eth_dst': self.P1_V100_MAC
+                },
+                {
+                    'in_port': 1,
+                    'vlan_vid': 0,
+                    'eth_src': self.P1_V100_MAC
+                },
+                {
+                    'in_port': 3,
+                    'vlan_vid': self.V200,
+                    'eth_src': self.P2_V200_MAC,
+                }
+            ]
+            self.verify_flooding(matches)
+
+        def test_known_eth_src_rule(self):
+            """Test that packets with known eth src addrs are not sent to controller."""
+            self.learn_hosts()
+            matches = [
+                {
+                    'in_port': 1,
+                    'vlan_vid': 0,
+                    'eth_src': self.P1_V100_MAC
+                    },
+                {
+                    'in_port': 2,
+                    'vlan_vid': self.V200,
+                    'eth_src': self.P2_V200_MAC
+                    },
+                {
+                    'in_port': 3,
+                    'vlan_vid': self.V200,
+                    'eth_src': self.P3_V200_MAC,
+                    'eth_dst': self.P2_V200_MAC
+                    }
+                ]
+            for match in matches:
+                self.assertFalse(
+                    self.table.is_output(match, port=ofp.OFPP_CONTROLLER),
+                    msg="Packet ({0}) output to controller when eth_src address"
+                        " is known".format(match))
+
+        def test_known_eth_src_deletion(self):
+            """Verify that when a mac changes port the old rules get deleted.
+
+            If a mac address is seen on one port, then seen on a different port on
+            the same vlan the rules associated with that mac address on previous
+            port need to be deleted. IE packets with that mac address arriving on
+            the old port should be output to the controller."""
+
+            self.rcv_packet(3, 0x200, {
+                'eth_src': self.P2_V200_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vlan_vid': 0x200,
+                'ipv4_src': '10.0.0.3',
+                'ipv4_dst': '10.0.0.3'})
+            match = {'in_port': 2, 'vlan_vid': 0, 'eth_src': self.P2_V200_MAC}
+            self.assertTrue(
+                self.table.is_output(match, port=ofp.OFPP_CONTROLLER),
+                msg='eth src rule not deleted when mac seen on another port')
+
+        def test_known_eth_dst_rule(self):
+            """Test that packets with known eth dst addrs are output correctly.
+
+            Output to the correct port with the correct vlan tagging."""
+            self.learn_hosts()
+            match_results = [
+                ({
+                    'in_port': 2,
+                    'vlan_vid': self.V100,
+                    'eth_dst': self.P1_V100_MAC
+                    }, {
+                        'out_port': 1,
+                        'vlan_vid': 0
+                    }),
+                ({
+                    'in_port': 3,
+                    'vlan_vid': self.V200,
+                    'eth_dst': self.P2_V200_MAC,
+                    'eth_src': self.P3_V200_MAC
+                    }, {
+                        'out_port': 2,
+                        'vlan_vid': 0,
+                    })
+                ]
+            for match, result in match_results:
+                self.assertTrue(
+                    self.table.is_output(
+                        match, result['out_port'], vid=result['vlan_vid']),
+                    msg='packet not output to port correctly when eth dst is known')
+                incorrect_ports = set(range(1, self.NUM_PORTS + 1))
+                incorrect_ports.remove(result['out_port'])
+                for port in incorrect_ports:
+                    self.assertFalse(
+                        self.table.is_output(match, port=port),
+                        msg=('packet %s output to incorrect port %u when eth_dst '
+                             'is known' % (match, port)))
+            self.verify_expiry()
+
+        def test_mac_learning_vlan_separation(self):
+            """Test that when a mac is seen on a second vlan the original vlan
+            rules are unaffected."""
+            self.learn_hosts()
+            self.rcv_packet(2, 0x200, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vlan_vid': 0x200,
+                'ipv4_src': '10.0.0.2',
+                'ipv4_dst': '10.0.0.3'})
+
+            # check eth_src rule
+            match1 = {'in_port': 1, 'vlan_vid': 0, 'eth_src': self.P1_V100_MAC}
+            self.assertFalse(
+                self.table.is_output(match1, ofp.OFPP_CONTROLLER),
+                msg=('mac address being seen on a vlan affects eth_src rule on '
+                     'other vlan'))
+
+            # check eth_dst rule
+            match2 = {'in_port': 3, 'vlan_vid': self.V100, 'eth_dst': self.P1_V100_MAC}
+            self.assertTrue(
+                self.table.is_output(match2, port=1, vid=0),
+                msg=('mac address being seen on a vlan affects eth_dst rule on '
+                     'other vlan'))
+            for port in (2, 4):
+                self.assertFalse(
+                    self.table.is_output(match2, port=port),
+                    msg=('mac address being seen on a vlan affects eth_dst rule on '
+                         'other vlan'))
+
+        def test_known_eth_dst_rule_deletion(self):
+            """Test that eth_dst rules are deleted when the mac is learned on
+            another port.
+
+            This should only occur when the mac is seen on the same vlan."""
+            self.rcv_packet(2, 0x100, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'ipv4_src': '10.0.0.2',
+                'ipv4_dst': '10.0.0.3'})
+            match = {'in_port': 3, 'vlan_vid': self.V100, 'eth_dst': self.P1_V100_MAC}
+            self.assertTrue(
+                self.table.is_output(match, port=2, vid=self.V100),
+                msg='Packet not output correctly after mac is learnt on new port')
+            self.assertFalse(
+                self.table.is_output(match, port=1),
+                msg='Packet output on old port after mac is learnt on new port')
+
+        def test_port_delete_eth_dst_removal(self):
+            """Test that when a port is disabled packets are correctly output. """
+            match = {'in_port': 2, 'vlan_vid': self.V100, 'eth_dst': self.P1_V100_MAC}
+
+            valve_vlan = self.valve.dp.vlans[match['vlan_vid'] & ~ofp.OFPVID_PRESENT]
+            ofmsgs = self.valve.port_delete(port_num=1)
+            self.table.apply_ofmsgs(ofmsgs)
+
+            # Check packets are output to each port on vlan
+            for port in valve_vlan.get_ports():
+                if port.number != match['in_port'] and port.running():
+                    if valve_vlan.port_is_tagged(port):
+                        vid = valve_vlan.vid|ofp.OFPVID_PRESENT
+                    else:
+                        vid = 0
+                    self.assertTrue(
+                        self.table.is_output(match, port=port.number, vid=vid),
+                        msg=('packet %s with eth dst learnt on deleted port not output '
+                             'correctly on vlan %u to port %u' % (
+                                 match, valve_vlan.vid, port.number)))
+
+        def test_port_down_eth_src_removal(self):
+            """Test that when a port goes down and comes back up learnt mac
+            addresses are deleted."""
+
+            match = {'in_port': 1, 'vlan_vid': 0, 'eth_src': self.P1_V100_MAC}
+            self.flap_port(1)
+            self.assertTrue(
+                self.table.is_output(match, port=ofp.OFPP_CONTROLLER),
+                msg='Packet not output to controller after port bounce')
+
+        def test_port_add_input(self):
+            """Test that when a port is enabled packets are input correctly."""
+
+            match = {'in_port': 1, 'vlan_vid': 0}
+            self.table.apply_ofmsgs(
+                self.valve.port_delete(port_num=1))
+            self.assertFalse(
+                self.table.is_output(match, port=2, vid=self.V100),
+                msg='Packet output after port delete')
+
+            self.table.apply_ofmsgs(
+                self.valve.port_add(port_num=1))
+            self.assertTrue(
+                self.table.is_output(match, port=2, vid=self.V100),
+                msg='Packet not output after port add')
+
+        def test_dp_acl_deny(self):
+            acl_config = """
+dps:
+    s1:
+        hardware: 'Open vSwitch'
+        dp_acls: [drop_non_ospf_ipv4]
+%s
+        interfaces:
+            p2:
+                number: 2
+                native_vlan: v200
+            p3:
+                number: 3
+                tagged_vlans: [v200]
+vlans:
+    v200:
+        vid: 0x200
+acls:
+    drop_non_ospf_ipv4:
+        - rule:
+            nw_dst: '224.0.0.5'
+            dl_type: 0x800
+            actions:
+                meter: testmeter
+                allow: 1
+        - rule:
+            dl_type: 0x800
+            actions:
+                output:
+                    set_fields:
+                        - eth_dst: 00:00:00:00:00:01
+                allow: 0
+meters:
+    testmeter:
+        meter_id: 99
+        entry:
+            flags: "KBPS"
+            bands:
+                [
+                    {
+                        type: "DROP",
+                        rate: 1
+                    }
+                ]
+""" % DP1_CONFIG
+
+            drop_match = {
+                'in_port': 2,
+                'vlan_vid': 0,
+                'eth_type': 0x800,
+                'ipv4_dst': '192.0.2.1'}
+            accept_match = {
+                'in_port': 2,
+                'vlan_vid': 0,
+                'eth_type': 0x800,
+                'ipv4_dst': '224.0.0.5'}
+            self.update_config(acl_config)
+            self.flap_port(2)
+            self.assertFalse(
+                self.table.is_output(drop_match),
+                msg='packet not blocked by ACL')
+            self.assertTrue(
+                self.table.is_output(accept_match, port=3, vid=self.V200),
+                msg='packet not allowed by ACL')
+
+        def test_port_acl_deny(self):
+            """Test that port ACL denies forwarding."""
+            acl_config = """
+dps:
+    s1:
+        hardware: 'Open vSwitch'
+%s
+        interfaces:
+            p2:
+                number: 2
+                native_vlan: v200
+                acl_in: drop_non_ospf_ipv4
+            p3:
+                number: 3
+                tagged_vlans: [v200]
+vlans:
+    v200:
+        vid: 0x200
+acls:
+    drop_non_ospf_ipv4:
+        - rule:
+            nw_dst: '224.0.0.5'
+            dl_type: 0x800
+            actions:
+                meter: testmeter
+                allow: 1
+        - rule:
+            dl_type: 0x800
+            actions:
+                allow: 0
+meters:
+    testmeter:
+        meter_id: 99
+        entry:
+            flags: "KBPS"
+            bands:
+                [
+                    {
+                        type: "DROP",
+                        rate: 1
+                    }
+                ]
+""" % DP1_CONFIG
+
+            drop_match = {
+                'in_port': 2,
+                'vlan_vid': 0,
+                'eth_type': 0x800,
+                'ipv4_dst': '192.0.2.1'}
+            accept_match = {
+                'in_port': 2,
+                'vlan_vid': 0,
+                'eth_type': 0x800,
+                'ipv4_dst': '224.0.0.5'}
+            # base case
+            for match in (drop_match, accept_match):
+                self.assertTrue(
+                    self.table.is_output(match, port=3, vid=self.V200),
+                    msg='Packet not output before adding ACL')
+
+            self.update_config(acl_config)
+            self.assertFalse(
+                self.table.is_output(drop_match),
+                msg='packet not blocked by ACL')
+            self.assertTrue(
+                self.table.is_output(accept_match, port=3, vid=self.V200),
+                msg='packet not allowed by ACL')
+
+        def test_lldp_beacon(self):
+            """Test LLDP beacon service."""
+            # TODO: verify LLDP packet content.
+            self.assertTrue(self.valve.fast_advertise(time.time(), None))
+
+        def test_unknown_port(self):
+            """Test port status change for unknown port handled."""
+            self.set_port_up(99)
+
+        def test_port_modify(self):
+            """Set port status modify."""
+            for port_status in (0, 1):
+                self.table.apply_ofmsgs(self.valve.port_status_handler(
+                    1, ofp.OFPPR_MODIFY, port_status))
+
+        def test_unknown_port_status(self):
+            """Test unknown port status message."""
+            known_messages = set([ofp.OFPPR_MODIFY, ofp.OFPPR_ADD, ofp.OFPPR_DELETE])
+            unknown_messages = list(set(range(0, len(known_messages) + 1)) - known_messages)
+            self.assertTrue(unknown_messages)
+            self.assertFalse(self.valve.port_status_handler(
+                1, unknown_messages[0], 1))
+
+        def test_move_port(self):
+            """Test host moves a port."""
+            self.rcv_packet(2, 0x200, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vlan_vid': 0x200,
+                'ipv4_src': '10.0.0.2',
+                'ipv4_dst': '10.0.0.3'})
+            self.rcv_packet(4, 0x200, {
+                'eth_src': self.P1_V100_MAC,
+                'eth_dst': self.UNKNOWN_MAC,
+                'vlan_vid': 0x200,
+                'ipv4_src': '10.0.0.2',
+                'ipv4_dst': '10.0.0.3'})
+
+        def test_bgp_route_change(self):
+            """Test BGP route change handler."""
+            nexthop = '10.0.0.1'
+            prefix = '192.168.1.1/32'
+            add_event = RouteAddition(
+                IPPrefix.from_string(prefix),
+                IPAddress.from_string(nexthop),
+                '65001',
+                'IGP'
+            )
+            del_event = RouteRemoval(
+                IPPrefix.from_string(prefix),
+            )
+            self.bgp._bgp_route_handler(
+                add_event,
+                faucet_bgp.BgpSpeakerKey(self.DP_ID, 0x100, 4))
+            self.bgp._bgp_route_handler(
+                del_event,
+                faucet_bgp.BgpSpeakerKey(self.DP_ID, 0x100, 4))
+            self.bgp._bgp_up_handler(nexthop, 65001)
+            self.bgp._bgp_down_handler(nexthop, 65001)
+
+        def test_packet_in_rate(self):
+            """Test packet in rate limit triggers."""
+            now = time.time()
+            for _ in range(self.valve.dp.ignore_learn_ins * 2 + 1):
+                if self.valve.rate_limit_packet_ins(now):
+                    return
+            self.fail('packet in rate limit not triggered')
+
+        def test_ofdescstats_handler(self):
+            """Test OFDescStatsReply handler."""
+            body = parser.OFPDescStats(
+                mfr_desc=u'test_mfr_desc'.encode(),
+                hw_desc=u'test_hw_desc'.encode(),
+                sw_desc=u'test_sw_desc'.encode(),
+                serial_num=u'99'.encode(),
+                dp_desc=u'test_dp_desc'.encode())
+            self.valve.ofdescstats_handler(body)
+            invalid_body = parser.OFPDescStats(
+                mfr_desc=b'\x80',
+                hw_desc=b'test_hw_desc',
+                sw_desc=b'test_sw_desc',
+                serial_num=b'99',
+                dp_desc=b'test_dp_desc')
+            self.valve.ofdescstats_handler(invalid_body)
+
 
 class ValveChangeACLTestCase(ValveTestBases.ValveTestSmall):
     """Test changes to ACL on a port."""
