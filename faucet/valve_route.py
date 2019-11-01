@@ -883,13 +883,13 @@ class ValveIPv4RouteManager(ValveRouteManager):
             arp_replies = self._control_plane_arp_handler(now, pkt_meta)
             if arp_replies:
                 return arp_replies
-            ipv4_pkt = self._ip_pkt(pkt_meta.pkt)
-            if ipv4_pkt is None:
-                return []
-            icmp_replies = self._control_plane_icmp_handler(
-                pkt_meta, ipv4_pkt)
-            if icmp_replies:
-                return icmp_replies
+        ipv4_pkt = self._ip_pkt(pkt_meta.pkt)
+        if ipv4_pkt is None:
+            return []
+        icmp_replies = self._control_plane_icmp_handler(
+            pkt_meta, ipv4_pkt)
+        if icmp_replies:
+            return icmp_replies
         return super(ValveIPv4RouteManager, self).control_plane_handler(now, pkt_meta)
 
 
@@ -1064,13 +1064,12 @@ class ValveIPv6RouteManager(ValveRouteManager):
 
     def control_plane_handler(self, now, pkt_meta):
         """Resolve packets destined for router or proactively learn host information"""
-        if pkt_meta.packet_complete():
-            ipv6_pkt = self._ip_pkt(pkt_meta.pkt)
-            if ipv6_pkt is not None:
-                icmp_replies = self._control_plane_icmpv6_handler(
-                    now, pkt_meta, ipv6_pkt)
-                if icmp_replies:
-                    return icmp_replies
+        ipv6_pkt = self._ip_pkt(pkt_meta.pkt)
+        if ipv6_pkt is not None:
+            icmp_replies = self._control_plane_icmpv6_handler(
+                now, pkt_meta, ipv6_pkt)
+            if icmp_replies:
+                return icmp_replies
         return super(ValveIPv6RouteManager, self).control_plane_handler(now, pkt_meta)
 
     def advertise(self, vlan):
