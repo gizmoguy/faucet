@@ -7520,7 +7520,12 @@ class FaucetSingleStackStringOfDPExtLoopProtUntaggedTest(FaucetStringOfDPTest):
             use_external=True)
         self.start_net()
 
-    def test_untagged(self):
+    def test_port_down(self):
+        """Basic port up/down functionality works"""
+        self.set_port_down(self.port_maps[self.dpids[0]]['port_5'], self.dpids[0], dpname=self.dpnames[self.dpids[0]])
+        self.set_port_down(self.port_maps[self.dpids[1]]['port_5'], self.dpids[1], dpname=self.dpnames[self.dpids[1]])
+
+    def x_test_untagged(self):
         """Host can reach each other, unless both marked loop_protect_external"""
         for host in self.hosts_name_ordered():
             self.require_host_learned(host)
