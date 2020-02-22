@@ -18,20 +18,29 @@
 
 import time
 
+from ryu.app.wsgi import WSGIApplication
 from ryu.controller.handler import MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
+from ryu.controller import dpset
+from ryu.controller import event
 from ryu.controller import ofp_event
 
 from faucet import valve_of
 from faucet.conf import InvalidConfigError
 from faucet.config_parser import watcher_parser
+from faucet.gauge_api import GaugeAPI
 from faucet.gauge_pollers import GaugePortStatePoller
 from faucet.gauge_prom import GaugePrometheusClient
+from faucet.gauge_wsgi_app import GaugeWSGIApp
 from faucet.valves_manager import ConfigWatcher
 from faucet.valve_of import ofp, parser
 from faucet.valve_ryuapp import EventReconfigure, RyuAppBase
 from faucet.valve_util import dpid_log, kill_on_exception
 from faucet.watcher import watcher_factory
+
+
+class EventGaugeAPIRegistered(event.EventBase):  # pylint: disable=too-few-public-methods
+    """Event used to notify that the API is registered with Gauge."""
 
 
 class Gauge(RyuAppBase):
@@ -42,11 +51,19 @@ class Gauge(RyuAppBase):
     GAUGE_CONFIG. It logs to the file set as the environment variable
     GAUGE_LOG,
     """
+    _CONTEXTS = {
+        'dpset': dpset.DPSet,
+        'gauge_api': GaugeAPI,
+        'gauge_wsgi_app': WSGIApplication,
+        }
     logname = 'gauge'
     exc_logname = logname + '.exception'
 
     def __init__(self, *args, **kwargs):
         super(Gauge, self).__init__(*args, **kwargs)
+        self.api = kwargs['gauge_api']
+        self.wsgi = kwargs['gauge_wsgi_app']
+        self.wsgi.register(GaugeWSGIApp, {'gauge_api': self.api})
         self.watchers = {}
         self.config_watcher = ConfigWatcher()
         self.faucet_config_watchers = []
@@ -65,6 +82,12 @@ class Gauge(RyuAppBase):
         Returns:
         """
         return self._get_datapath_obj(self.watchers, ryu_event)
+
+    @kill_on_exception(exc_logname)
+    def _start_api(self):
+        # Register to API
+        self.api._register(self)
+        self.send_event_to_observers(EventGaugeAPIRegistered())
 
     @kill_on_exception(exc_logname)
     def _load_config(self):
@@ -129,6 +152,7 @@ class Gauge(RyuAppBase):
     def reload_config(self, ryu_event):
         """Handle request for Gauge config reload."""
         super(Gauge, self).reload_config(ryu_event)
+        self._start_api()
         self._load_config()
 
     def _start_watchers(self, ryu_dp, watchers, timestamp):
