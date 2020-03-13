@@ -21,6 +21,7 @@ from collections import defaultdict, deque
 import random
 import time
 
+import inspect
 import ipaddress
 
 from ryu.lib.packet import arp, icmp, icmpv6, ipv4, ipv6
@@ -211,6 +212,12 @@ class ValveRouteManager(ValveManagerBase):
                     self._gw_respond_pkt(), port,
                     vlan.faucet_mac, eth_src,
                     solicited_ip, src_ip))
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
+
         return ofmsgs
 
     def _gw_advert(self, pkt_meta, target_ip, now):
@@ -406,6 +413,12 @@ class ValveRouteManager(ValveManagerBase):
             in_match = self._route_match(routed_vlan, ip_dst)
             ofmsgs.append(self.fib_table.flowmod(
                 in_match, priority=self._route_priority(ip_dst), inst=inst))
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
+
         return ofmsgs
 
     def _update_nexthop_cache(self, now, vlan, eth_src, port, ip_gw):
@@ -435,6 +448,11 @@ class ValveRouteManager(ValveManagerBase):
             for ip_dst in vlan.ip_dsts_for_ip_gw(resolved_ip_gw):
                 ofmsgs.extend(self._add_resolved_route(
                     vlan, resolved_ip_gw, ip_dst, eth_src, is_updated))
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
 
         self._update_nexthop_cache(now, vlan, eth_src, port, resolved_ip_gw)
         return ofmsgs
@@ -856,6 +874,12 @@ class ValveIPv4RouteManager(ValveRouteManager):
             if pkt_meta.eth_dst == pkt_meta.vlan.faucet_mac:
                 ofmsgs.extend(self._gw_advert(pkt_meta, pkt_meta.l3_src, now))
         self.notify_learn(pkt_meta)
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
+
         return ofmsgs
 
     def _control_plane_icmp_handler(self, pkt_meta, ipv4_pkt):
@@ -882,6 +906,10 @@ class ValveIPv4RouteManager(ValveRouteManager):
         if pkt_meta.packet_complete():
             arp_replies = self._control_plane_arp_handler(now, pkt_meta)
             if arp_replies:
+                self.logger.info("*** in %s:%s func %s (called by %s) | arp_replies=%s" % (
+                    inspect.getframeinfo(inspect.currentframe()).filename,
+                    inspect.getframeinfo(inspect.currentframe()).lineno,
+                    inspect.stack()[0][3], inspect.stack()[1][3], arp_replies))
                 return arp_replies
             ipv4_pkt = self._ip_pkt(pkt_meta.pkt)
             if ipv4_pkt is None:

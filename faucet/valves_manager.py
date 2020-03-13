@@ -17,6 +17,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
+
 from collections import defaultdict
 
 from faucet.conf import InvalidConfigError
@@ -273,6 +275,12 @@ class ValvesManager:
     def _send_ofmsgs_by_valve(self, ofmsgs_by_valve):
         if ofmsgs_by_valve:
             for valve, ofmsgs in ofmsgs_by_valve.items():
+
+                self.logger.info("*** in %s:%s func %s (called by %s) | valve=%s ofmsgs=%s" % (
+                    inspect.getframeinfo(inspect.currentframe()).filename,
+                    inspect.getframeinfo(inspect.currentframe()).lineno,
+                    inspect.stack()[0][3], inspect.stack()[1][3], valve, ofmsgs))
+
                 self.send_flows_to_dp_by_id(valve, ofmsgs)
 
     def _notify(self, event_dict, dp=None):
@@ -343,6 +351,12 @@ class ValvesManager:
                 **valve.dp.base_prom_labels()).time():
             ofmsgs_by_valve = valve.rcv_packet(now, self._other_running_valves(valve), pkt_meta)
         if ofmsgs_by_valve:
+
+            self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs_by_valve=%s" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs_by_valve))
+
             self._send_ofmsgs_by_valve(ofmsgs_by_valve)
             valve.update_metrics(now, pkt_meta.port, rate_limited=True)
 

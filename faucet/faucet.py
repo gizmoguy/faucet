@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import time
 
 from functools import partial
@@ -176,11 +177,25 @@ class Faucet(RyuAppBase):
             flow_msgs (list): OpenFlow messages to send.
             ryu_dp: Override datapath from DPSet.
         """
+
+
         if ryu_dp is None:
             ryu_dp = self.dpset.get(valve.dp.dp_id)
         if not ryu_dp:
             valve.logger.error('send_flow_msgs: DP not up')
+
+            self.logger.info("*** in %s:%s func %s (called by %s) | DP not up!" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3]))
+
             return
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ryu_dp=%s flow_msgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ryu_dp, flow_msgs))
+
         valve.send_flows(ryu_dp, flow_msgs)
 
     def _get_valve(self, ryu_event, require_running=False):

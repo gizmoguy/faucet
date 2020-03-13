@@ -18,6 +18,7 @@
 # limitations under the License.
 
 import copy
+import inspect
 import logging
 
 from collections import defaultdict, deque
@@ -1440,6 +1441,12 @@ class Valve:
         control_plane_ofmsgs = self._control_plane_handler(
             now, pkt_meta, route_manager)
         ofmsgs = []
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | control_plane_ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], control_plane_ofmsgs))
+
         if control_plane_ofmsgs:
             ofmsgs.extend(control_plane_ofmsgs)
         else:
@@ -1452,6 +1459,12 @@ class Valve:
             ofmsgs.extend(
                 route_manager.resolve_expire_hosts(
                     pkt_meta.vlan, now, resolve_all=False))
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
+
         return ofmsgs
 
     @staticmethod
@@ -1481,6 +1494,12 @@ class Valve:
                 # TODO: we will repeatedly spam the DP for each packet in.
                 # Should use learn_host() style rate limiting.
                 ofmsgs.extend(valve.router_learn_host(pkt_meta))
+
+            self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs=%s" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs))
+
             return ofmsgs
 
         ofmsgs_by_valve = {}
@@ -1514,6 +1533,12 @@ class Valve:
 
         ofmsgs_by_valve[self] = handle_pkt(
             self, now, pkt_meta, other_valves)
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | ofmsgs_by_valve=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], ofmsgs_by_valve))
+
         return ofmsgs_by_valve
 
     def rcv_packet(self, now, other_valves, pkt_meta):
@@ -1536,9 +1561,17 @@ class Valve:
         #        pkt_meta.port.number,
         #        pkt_meta.vlan))
 
+        pkts = None
         if pkt_meta.vlan is None:
-            return self._non_vlan_rcv_packet(now, other_valves, pkt_meta)
-        return self._vlan_rcv_packet(now, other_valves, pkt_meta)
+            pkts = self._non_vlan_rcv_packet(now, other_valves, pkt_meta)
+        pkts = self._vlan_rcv_packet(now, other_valves, pkt_meta)
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | pkts=%s" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3], pkts))
+
+        return pkts
 
     def _lacp_state_expire(self, now, _other_valves):
         """Expire controller state for LACP.
@@ -1813,11 +1846,29 @@ class Valve:
             ryu_dp (ryu.controller.controller.Datapath): datapath.
             flow_msgs (list): OpenFlow messages to send.
         """
+
+        self.logger.info("*** in %s:%s func %s (called by %s) | starting" % (
+            inspect.getframeinfo(inspect.currentframe()).filename,
+            inspect.getframeinfo(inspect.currentframe()).lineno,
+            inspect.stack()[0][3], inspect.stack()[1][3]))
+
         if flow_msgs is None:
+
+            self.logger.info("*** in %s:%s func %s (called by %s) | flow_msgs is None" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3]))
+
             self.datapath_disconnect()
             ryu_dp.close()
         else:
             for flow_msg in self.prepare_send_flows(flow_msgs):
+
+                self.logger.info("*** in %s:%s func %s (called by %s) | ryu_dp=%s flow_msg=%s" % (
+                    inspect.getframeinfo(inspect.currentframe()).filename,
+                    inspect.getframeinfo(inspect.currentframe()).lineno,
+                    inspect.stack()[0][3], inspect.stack()[1][3], ryu_dp, flow_msg))
+
                 flow_msg.datapath = ryu_dp
                 ryu_dp.send_msg(flow_msg)
 
