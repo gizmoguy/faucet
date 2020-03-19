@@ -99,12 +99,15 @@ class Gauge(RyuAppBase):
                 watcher_factory(watcher_conf)(watcher_conf, self.logname, self.prom_client)
                 for watcher_conf in new_confs]
         except InvalidConfigError as err:
+            import sys, traceback
+            traceback.print_exc()
             self.config_watcher.update(self.config_file)
             self.logger.error('invalid config: %s', err)
             return
 
         for old_watchers in self.watchers.values():
             self._stop_watchers(old_watchers)
+
         new_watchers = {}
         for watcher in watchers:
             watcher_dpid = watcher.dp.dp_id

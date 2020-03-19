@@ -30,7 +30,7 @@ class GaugeWSGIApp(ControllerBase):
 
     @route('dump_state', '/dump_state', methods=['GET'])
     def dump_state(self, req, **kwargs):
-        if self.gauge_api.get_watchers():
+        if self.gauge_api.dump_all():
             return Response(content_type='application/json', json_body={"status": "200"})
         else:
             return Response(content_type='application/json', json_body={"status": "403"})

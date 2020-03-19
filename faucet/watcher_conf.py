@@ -182,10 +182,10 @@ For Prometheus:
         test_config_condition(
             self.file is not None and not
             (os.path.dirname(self.file) and os.access(os.path.dirname(self.file), os.W_OK)),
-            '%s is not writable' % self.file)
+            'file %s is not writable' % self.file)
         test_config_condition(
             self.path is not None and not os.access(self.path, os.W_OK),
-            '%s is not writable' % self.file)
+            'path %s is not writable' % self.path)
 
     def add_dp(self, dp): # pylint: disable=invalid-name
         """Add a datapath to this watcher."""
