@@ -2,6 +2,7 @@
 """Topology components for FAUCET Mininet unit tests."""
 
 from collections import namedtuple
+import inspect
 import os
 import socket
 import string
@@ -447,10 +448,19 @@ socket_timeout=15
 
     def listen_port(self, port, state='LISTEN'):
         """Return True if port in specified TCP state."""
+        print("*** in %s:%s func %s (called by %s)" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3]))
         for ipv in (4, 6):
             listening_out = self.cmd(
                 mininet_test_util.tcp_listening_cmd(port, ipv=ipv, state=state)).split()
+            print("***     mininet_test_util.tcp_listening_cmd(%s, ipv=%s, state=%s) = %s" % (port, ipv, state, listening_out))
+            cmd_to_run = mininet_test_util.tcp_listening_cmd(port, ipv=ipv, state=state, terse=False)
+            print("***     $ %s" % cmd_to_run)
+            print("***     %s" % self.cmd(cmd_to_run))
             for pid in listening_out:
+                print("***         int(%s) == %s" % (int(pid), self.ryu_pid()))
                 if int(pid) == self.ryu_pid():
                     return True
         return False
@@ -476,6 +486,15 @@ socket_timeout=15
 
     def healthy(self):
         """Return True if controller logging and listening on required ports."""
+        print("*** in %s:%s func %s (called by %s)" % (
+                inspect.getframeinfo(inspect.currentframe()).filename,
+                inspect.getframeinfo(inspect.currentframe()).lineno,
+                inspect.stack()[0][3], inspect.stack()[1][3]))
+
+        print("***     os.path.exists(%s) = %s" % (self.logname(), os.path.exists(self.logname())))
+        print("***     os.path.getsize(%s) = %s" % (self.logname(), os.path.getsize(self.logname())))
+        print("***     self.listening = %s" % self.listening())
+
         if (os.path.exists(self.logname()) and
                 os.path.getsize(self.logname()) and
                 self.listening()):
