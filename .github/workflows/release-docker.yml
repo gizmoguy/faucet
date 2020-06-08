@@ -24,8 +24,8 @@ jobs:
       - name: Run buildx
         run: |
           docker buildx build \
-            --tag faucet/faucet:${{ github.event.release.tag_name }} \
-            --tag faucet/faucet:latest \
+            --tag gizmoguy/faucet:${{ github.event.release.tag_name }} \
+            --tag gizmoguy/faucet:latest \
             --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x \
             --output "type=registry" \
             --file Dockerfile.faucet \
@@ -50,8 +50,8 @@ jobs:
       - name: Run buildx
         run: |
           docker buildx build \
-            --tag faucet/gauge:${{ github.event.release.tag_name }} \
-            --tag faucet/gauge:latest \
+            --tag gizmoguy/gauge:${{ github.event.release.tag_name }} \
+            --tag gizmoguy/gauge:latest \
             --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x \
             --output "type=registry" \
             --file Dockerfile.gauge \
@@ -76,8 +76,8 @@ jobs:
         run: |
           cd adapters/vendors/rabbitmq/
           docker buildx build \
-            --tag faucet/event-adapter-rabbitmq:${{ github.event.release.tag_name }} \
-            --tag faucet/event-adapter-rabbitmq:latest \
+            --tag gizmoguy/event-adapter-rabbitmq:${{ github.event.release.tag_name }} \
+            --tag gizmoguy/event-adapter-rabbitmq:latest \
             --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x \
             --output "type=registry" \
             --file Dockerfile \
@@ -102,8 +102,8 @@ jobs:
         run: |
           cd adapters/vendors/faucetagent/
           docker buildx build \
-            --tag faucet/event-adapter-faucetagent:${{ github.event.release.tag_name }} \
-            --tag faucet/event-adapter-faucetagent:latest \
+            --tag gizmoguy/event-adapter-faucetagent:${{ github.event.release.tag_name }} \
+            --tag gizmoguy/event-adapter-faucetagent:latest \
             --platform linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le \
             --output "type=registry" \
             --file Dockerfile \
