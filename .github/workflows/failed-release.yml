@@ -4,8 +4,6 @@ on:
   check_suite:
     type: ['completed']
 
-name: Continue after Cirrus CI Complets Successfully
-
 jobs:
   continue:
     name: After release

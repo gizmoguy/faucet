@@ -17,4 +17,4 @@ jobs:
     steps:
       - name: fail
         run: |
-          echo 99
+          exit 99
