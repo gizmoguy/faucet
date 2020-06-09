@@ -19,8 +19,12 @@ jobs:
           exit 0
       - name: fail
         run: |
-          exit 0
-      - name: notify
+          exit 1
+      - name: notify on failure
         if: failure()
-        run: |
-            echo "blah"
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          filename: .github/failed-workflow-issue.md
+
