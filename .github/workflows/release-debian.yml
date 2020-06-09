@@ -1,9 +1,8 @@
 name: Release workflow for building debian packages and images
 
 on:
-  release:
-    types:
-      - published
+  push:
+    branch: '*'
 
 env:
   DEBIAN_FRONTEND: noninteractive
@@ -15,6 +14,9 @@ jobs:
     container:
       image: "ubuntu:bionic"
     steps:
+      - name: success
+        run: |
+          exit 0
       - name: fail
         run: |
           exit 99
