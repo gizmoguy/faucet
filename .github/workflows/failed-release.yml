@@ -1,0 +1,15 @@
+name: Check for successful release
+
+on:
+  check_suite:
+    type: ['completed']
+
+name: Continue after Cirrus CI Complets Successfully
+
+jobs:
+  continue:
+    name: After release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create github issue
+      run: echo "${{ github.event.check_suite.app.name }}"
