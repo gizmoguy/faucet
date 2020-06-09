@@ -18,3 +18,7 @@ jobs:
       - name: fail
         run: |
           exit 99
+      - name: notify
+        if: failure()
+        run: |
+            echo "blah"
