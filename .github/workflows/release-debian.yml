@@ -19,7 +19,7 @@ jobs:
           exit 0
       - name: fail
         run: |
-          exit 99
+          exit 0
       - name: notify
         if: failure()
         run: |
