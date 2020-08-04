@@ -1,4 +1,4 @@
-name: Faucet scheduled tests
+name: Periodic tests
 
 on:
   schedule:
