@@ -1,0 +1,18 @@
+name: Build python packages for release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  python-package:
+    name: "Build python packages"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish package to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.3
+        with:
+          user: __token__
+          password: ${{ secrets.test_pypi_password }}
+          repository_url: https://test.pypi.org/legacy/
