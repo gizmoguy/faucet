@@ -16,7 +16,7 @@ gpasswd -a faucet sudo
 mkdir -p /etc/apt/sources.list.d
 
 # Add faucet repo
-echo "deb https://packagecloud.io/faucetsdn/faucet/$(lsb_release -si | awk '{print tolower($0)}')/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/faucet.list
+echo "deb https://packagecloud.io/faucetsdn/faucet-test/$(lsb_release -si | awk '{print tolower($0)}')/ $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/faucet.list
 curl -L https://packagecloud.io/faucetsdn/faucet/gpgkey | apt-key add -
 apt-get update
 
