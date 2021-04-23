@@ -83,19 +83,15 @@ jobs:
   rpi-image:
     name: "Build raspberry pi image"
     runs-on: ubuntu-latest
-    container:
-      image: "ubuntu:bionic"
-      options: --privileged
     needs: debian-package
     permissions:
       contents: write
     steps:
       - name: Install dependencies
         run: |
-          dpkg --add-architecture i386
           apt-get update
           apt-get -y upgrade
-          apt-get install -y coreutils quilt parted qemu-user-static:i386 debootstrap zerofree zip dosfstools libarchive-tools libcap2-bin grep rsync xz-utils file git curl bc xxd kmod binfmt-support
+          apt-get install -y binfmt-support
           /usr/sbin/update-binfmts --enable
       - name: Checkout repo
         uses: actions/checkout@v2
@@ -111,7 +107,7 @@ jobs:
           echo "IMG_NAME='faucet_${{ github.event.release.tag_name }}_raspbian'" > config
           touch ./stage3/SKIP ./stage4/SKIP ./stage5/SKIP
           touch ./stage4/SKIP_IMAGES ./stage5/SKIP_IMAGES
-          ./build.sh
+          ./build-docker.sh
           mv ./deploy/image_*_raspbian-lite.zip ./deploy/faucet_${{ github.event.release.tag_name }}_raspbian-lite.zip
       - name: Upload release asset
         uses: svenstaro/upload-release-action@v2
