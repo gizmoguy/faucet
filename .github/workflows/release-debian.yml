@@ -30,13 +30,13 @@ jobs:
         run: |
           cd images/raspbian/
           git clone https://github.com/RPi-Distro/pi-gen.git
-          cd pi-gen
       - name: Build image
         run: |
           cd images/raspbian/pi-gen/
           echo "IMG_NAME='faucet_${{ github.event.release.tag_name }}_raspbian'" > config
           mkdir ./stage2/04-install-faucet/
           mv ../install-faucet.sh ./stage2/04-install-faucet/02-run.sh
+          rm ./stage2/EXPORT_NOOBS
           touch ./stage3/SKIP ./stage4/SKIP ./stage5/SKIP
           touch ./stage4/SKIP_IMAGES ./stage5/SKIP_IMAGES
           ./build-docker.sh
