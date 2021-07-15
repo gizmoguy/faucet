@@ -73,3 +73,5 @@ jobs:
             echo "Running pylint on ${{ env.PY_FILES_CHANGED }}"
             ./pylint.sh ${{ env.PY_FILES_CHANGED }}
           fi
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@1.1.0
