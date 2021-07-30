@@ -7,6 +7,7 @@ exabgp==4.2.13
 importlab>=0.3.1
 netifaces
 packaging
+nox
 requests
 requirements-parser
 scapy==2.4.4
