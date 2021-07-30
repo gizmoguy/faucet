@@ -14,3 +14,7 @@ method-rgx=(([^\W\dA-Z][^\WA-Z]{2,}|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)|(setUp)
 # Override: add Faucet name (dp)
 argument-rgx=(([^\W\dA-Z][^\WA-Z]{2,}|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)|(dp))$
 variable-rgx=(([^\W\dA-Z][^\WA-Z]{2,}|_[^\WA-Z]*|__[^\WA-Z\d_][^\WA-Z]+__)|(dp))$
+
+[MESSAGES CONTROL]
+
+disable=import-error
