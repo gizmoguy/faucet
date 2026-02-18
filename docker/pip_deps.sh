@@ -20,7 +20,7 @@ for opt in "$@"; do
   esac
 done
 
-pip3="pip3 install -q --upgrade ${pip_args}"
+pip3="pip3 install --upgrade ${pip_args}"
 
 "${BASEDIR}/docker/retrycmd.sh" "${pip3} wheel"
 
