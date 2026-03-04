@@ -3,7 +3,8 @@ name: Build debian packages for release
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - "[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
 
 env:
   DEBIAN_FRONTEND: noninteractive
@@ -33,7 +34,7 @@ jobs:
         run: |
           export DEBEMAIL='maintainers@faucet.nz'
           export DEBFULLNAME='Faucet Maintainers'
-          debchange --newversion "${GITHUB_REF_NAME}" -b "New upstream release"
+          debchange --newversion "1.0.0" -b "New upstream release"
       - name: Build package
         run: |
           mk-build-deps -i -r -t 'apt-get -f -y --force-yes'
@@ -42,9 +43,3 @@ jobs:
         run: |
           mkdir -p packages/all
           cp ../*.deb packages/all
-      - name: Publish package on packagecloud
-        uses: faucetsdn/action-packagecloud-upload-debian-packages@v1
-        with:
-          path: packages/
-          repo: faucetsdn/faucet
-          token: ${{ secrets.PACKAGECLOUD_TOKEN }}
