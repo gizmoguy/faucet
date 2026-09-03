@@ -842,7 +842,7 @@ class Valve:
                 vlan.clear_cache_hosts_on_port(port)
         return ofmsgs
 
-    def ports_add(self, port_nums, cold_start=False, log_msg="up"):
+    def ports_add(self, port_nums, cold_start=False, log_msg="up", changed_vids=None):
         """Handle the addition of ports.
 
         Args:
@@ -881,6 +881,13 @@ class Valve:
 
         # Only update flooding rules if not cold starting.
         if not cold_start:
+            if changed_vids:
+                skip_vlans = set()
+                for vid in changed_vids:
+                    for vlan in vlans_with_ports_added:
+                        if vlan.vid == vid:
+                            skip_vlans.add(vlan)
+                vlans_with_ports_added -= skip_vlans
             ofmsgs.extend(self.add_vlans(vlans_with_ports_added))
         return ofmsgs
 
@@ -1664,12 +1671,12 @@ class Valve:
             all_up_port_nos = [
                 port for port in added_ports if port in self.dp.dyn_up_port_nos
             ]
-            ofmsgs.extend(self.ports_add(all_up_port_nos))
+            ofmsgs.extend(self.ports_add(all_up_port_nos, changed_vids=changed_vids))
         if changed_ports:
             all_up_port_nos = [
                 port for port in changed_ports if port in self.dp.dyn_up_port_nos
             ]
-            ofmsgs.extend(self.ports_add(all_up_port_nos))
+            ofmsgs.extend(self.ports_add(all_up_port_nos, changed_vids=changed_vids))
         if self.acl_manager and changed_acl_ports:
             for port_num in changed_acl_ports:
                 port = self.dp.ports[port_num]
