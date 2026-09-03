@@ -1626,6 +1626,13 @@ class Valve:
             self.dp_init(new_dp, valves)
             return restart_type, ofmsgs
 
+        for bgp_router in new_dp.bgp_routers():
+            bgp_vlan = bgp_router.bgp_vlan()
+            if bgp_vlan.vid in changed_vids:
+                self.logger.info("BGP VLAN changed")
+                self.dp_init(new_dp, valves)
+                return restart_type, ofmsgs
+
         restart_type = None
         for change in changes:
             if change:

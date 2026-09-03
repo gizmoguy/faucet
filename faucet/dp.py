@@ -1734,8 +1734,6 @@ class DP(Conf):
             logger.info(
                 "DP config changed - requires cold start: %s" % self.conf_diff(new_dp)
             )
-        elif len(self.bgp_routers()) >= 1 or len(new_dp.bgp_routers()) >= 1:
-            logger.info("BGP routing enabled - requires cold start")
         else:
             changed_acls = self._get_acl_config_changes(logger, new_dp)
             added_vlans, deleted_vlans, changed_vlans = self._get_vlan_config_changes(
