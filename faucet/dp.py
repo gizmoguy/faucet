@@ -1483,8 +1483,9 @@ class DP(Conf):
             changed_acls (set): changed/added ACL IDs.
         Returns:
             changes (tuple) of:
+                added_vlans (set): added VLAN IDs.
                 deleted_vlans (set): deleted VLAN IDs.
-                changed_vlans (set): changed/added VLAN IDs.
+                changed_vlans (set): changed VLAN IDs.
         """
         (
             _,
@@ -1501,7 +1502,6 @@ class DP(Conf):
             diff=True,
             ignore_keys=frozenset(["acls_in"]),
         )
-        changed_vlans = added_vlans.union(changed_vlans)
         # TODO: optimize for warm start.
         for vlan_id in same_vlans:
             old_vlan = self.vlans[vlan_id]
@@ -1510,7 +1510,7 @@ class DP(Conf):
                 "VLAN %u" % vlan_id, old_vlan, new_vlan, changed_acls, logger
             ):
                 changed_vlans.add(vlan_id)
-        return (deleted_vlans, changed_vlans)
+        return (added_vlans, deleted_vlans, changed_vlans)
 
     def _acl_ref_changes(self, conf_desc, old_conf, new_conf, changed_acls, logger):
         changed = False
@@ -1536,14 +1536,15 @@ class DP(Conf):
         return changed
 
     def _get_port_config_changes(
-        self, logger, new_dp, changed_vlans, deleted_vlans, changed_acls
+        self, logger, new_dp, added_vlans, changed_vlans, deleted_vlans, changed_acls
     ):
         """Detect any config changes to ports.
 
         Args:
             logger (ValveLogger): logger instance.
             new_dp (DP): new dataplane configuration.
-            changed_vlans (set): changed/added VLAN IDs.
+            added_vlans (set): added VLAN IDs.
+            changed_vlans (set): changed VLAN IDs.
             deleted_vlans (set): deleted VLAN IDs.
             changed_acls (set): changed/added ACL IDs.
         Returns:
@@ -1571,6 +1572,7 @@ class DP(Conf):
             ignore_keys=frozenset(["acls_in"]),
         )
 
+        changed_vlan_ports = set()
         changed_acl_ports = set()
         all_ports_changed = False
 
@@ -1588,18 +1590,27 @@ class DP(Conf):
             logger.info("Stack topology change detected, restarting stack ports")
             same_ports -= changed_ports
 
+        all_ports = frozenset(new_dp.ports.keys())
         if not same_ports:
             all_ports_changed = True
         # TODO: optimize case where only VLAN ACL changed.
-        elif changed_vlans:
-            all_ports = frozenset(new_dp.ports.keys())
-            new_changed_vlans = {
-                vlan for vlan in new_dp.vlans.values() if vlan.vid in changed_vlans
-            }
-            for vlan in new_changed_vlans:
-                changed_port_nums = {port.number for port in vlan.get_ports()}
-                changed_ports.update(changed_port_nums)
-            all_ports_changed = changed_ports == all_ports
+        elif changed_ports == all_ports:
+            all_ports_changed = True
+        elif added_vlans or changed_vlans:
+            added_changed_vlans = []
+            if added_vlans:
+                added_changed_vlans.extend(added_vlans)
+            if changed_vlans:
+                added_changed_vlans.extend(changed_vlans)
+            if len(added_changed_vlans) >= 1:
+                new_changed_vlans = {
+                    vlan
+                    for vlan in new_dp.vlans.values()
+                    if vlan.vid in added_changed_vlans
+                }
+                for vlan in new_changed_vlans:
+                    changed_port_nums = {port.number for port in vlan.get_ports()}
+                    changed_vlan_ports.update(changed_port_nums)
 
         # Detect changes to VLANs and ACLs based on port changes.
         if not all_ports_changed:
@@ -1655,19 +1666,10 @@ class DP(Conf):
                 same_ports -= changed_acl_ports
                 logger.info("ports where ACL only changed: %s" % changed_acl_ports)
 
+        changed_ports.update(changed_vlan_ports)
         same_ports -= changed_ports
+        changed_vlans -= added_vlans
         changed_vlans -= deleted_vlans
-        # TODO: limit scope to only routers that have affected VLANs.
-        changed_vlans_with_vips = []
-        for vid in changed_vlans:
-            vlan = new_dp.vlans[vid]
-            if vlan.faucet_vips:
-                changed_vlans_with_vips.append(vlan)
-        if changed_vlans_with_vips:
-            logger.info(
-                "forcing cold start because %s has routing" % changed_vlans_with_vips
-            )
-            all_ports_changed = True
 
         return (
             all_ports_changed,
@@ -1712,8 +1714,9 @@ class DP(Conf):
                 changed_ports (set): changed port numbers.
                 added_ports (set): added port numbers.
                 changed_acl_ports (set): changed ACL only port numbers.
+                added_vlans (set): added VLAN IDs.
                 deleted_vlans (set): deleted VLAN IDs.
-                changed_vlans (set): changed/added VLAN IDs.
+                changed_vlans (set): changed VLAN IDs.
                 all_ports_changed (bool): True if all ports changed.
                 all_meters_changed (bool): True if all meters changed
                 deleted_meters (set): deleted meter numbers
@@ -1736,7 +1739,7 @@ class DP(Conf):
             )
         else:
             changed_acls = self._get_acl_config_changes(logger, new_dp)
-            deleted_vlans, changed_vlans = self._get_vlan_config_changes(
+            added_vlans, deleted_vlans, changed_vlans = self._get_vlan_config_changes(
                 logger, new_dp, changed_acls
             )
             (
@@ -1753,13 +1756,19 @@ class DP(Conf):
                 changed_acl_ports,
                 changed_vlans,
             ) = self._get_port_config_changes(
-                logger, new_dp, changed_vlans, deleted_vlans, changed_acls
+                logger,
+                new_dp,
+                added_vlans,
+                changed_vlans,
+                deleted_vlans,
+                changed_acls,
             )
             return (
                 deleted_ports,
                 changed_ports,
                 added_ports,
                 changed_acl_ports,
+                added_vlans,
                 deleted_vlans,
                 changed_vlans,
                 all_ports_changed,
@@ -1770,6 +1779,7 @@ class DP(Conf):
             )
         # default cold start
         return (
+            set(),
             set(),
             set(),
             set(),
