@@ -1588,27 +1588,27 @@ class DP(Conf):
             logger.info("Stack topology change detected, restarting stack ports")
             same_ports -= changed_ports
 
+        all_ports = frozenset(new_dp.ports.keys())
         if not same_ports:
             all_ports_changed = True
         # TODO: optimize case where only VLAN ACL changed.
-        else:
-            all_ports = frozenset(new_dp.ports.keys())
+        elif changed_ports == all_ports:
+            all_ports_changed = True
+        elif added_vlans or changed_vlans:
+            added_changed_vlans = []
             if added_vlans:
-                new_changed_vlans = {
-                    vlan for vlan in new_dp.vlans.values() if vlan.vid in added_vlans
-                }
-                for vlan in new_changed_vlans:
-                    changed_port_nums = {port.number for port in vlan.get_ports()}
-                    changed_vlan_ports.update(changed_port_nums)
-                all_ports_changed = changed_ports == all_ports
+                added_changed_vlans.extend(added_vlans)
             if changed_vlans:
+                added_changed_vlans.extend(changed_vlans)
+            if len(added_changed_vlans) >= 1:
                 new_changed_vlans = {
-                    vlan for vlan in new_dp.vlans.values() if vlan.vid in changed_vlans
+                    vlan
+                    for vlan in new_dp.vlans.values()
+                    if vlan.vid in added_changed_vlans
                 }
                 for vlan in new_changed_vlans:
                     changed_port_nums = {port.number for port in vlan.get_ports()}
                     changed_vlan_ports.update(changed_port_nums)
-                all_ports_changed = changed_ports == all_ports
 
         # Detect changes to VLANs and ACLs based on port changes.
         if not all_ports_changed:
