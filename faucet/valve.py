@@ -449,22 +449,22 @@ class Valve:
             ofmsgs.extend(self.add_vlan(vlan, cold_start=cold_start))
         return ofmsgs
 
-    def del_vlan(self, vlan):
+    def del_vlan(self, vlan, dp_vlans):
         """Delete a configured VLAN."""
         self.logger.info("Delete VLAN %s" % vlan)
         ofmsgs = []
         for manager in self._managers:
-            ofmsgs.extend(manager.del_vlan(vlan))
+            ofmsgs.extend(manager.del_vlan(vlan, dp_vlans))
         expired_hosts = list(vlan.dyn_host_cache.values())
         for entry in expired_hosts:
             self._update_expired_host(entry, vlan)
         vlan.reset_caches()
         return ofmsgs
 
-    def del_vlans(self, vlans):
+    def del_vlans(self, vlans, dp_vlans):
         ofmsgs = []
         for vlan in vlans:
-            ofmsgs.extend(self.del_vlan(vlan))
+            ofmsgs.extend(self.del_vlan(vlan, dp_vlans))
         return ofmsgs
 
     def _get_all_configured_port_nos(self):
@@ -1597,6 +1597,7 @@ class Valve:
             changed_ports,
             added_ports,
             changed_acl_ports,
+            added_vids,
             deleted_vids,
             changed_vids,
             all_ports_changed,
@@ -1635,7 +1636,7 @@ class Valve:
             ofmsgs.extend(self.ports_delete(changed_ports))
         if deleted_vids:
             deleted_vlans = [self.dp.vlans[vid] for vid in deleted_vids]
-            ofmsgs.extend(self.del_vlans(deleted_vlans))
+            ofmsgs.extend(self.del_vlans(deleted_vlans, new_dp.vlans.values()))
         # TODO: optimize for all meters being erased
         if changed_meters:
             # If a meter changed meter IDs, delete the old ID first and consider
@@ -1649,6 +1650,10 @@ class Valve:
         if self.acl_manager:
             if deleted_meters:
                 ofmsgs.extend(self.acl_manager.del_meters(deleted_meters))
+
+        if changed_vids:
+            changed_vlans = [self.dp.vlans[vid] for vid in changed_vids]
+            ofmsgs.extend(self.del_vlans(changed_vlans, new_dp.vlans.values()))
 
         self.dp_init(new_dp, valves)
 
@@ -1669,12 +1674,25 @@ class Valve:
             for port_num in changed_acl_ports:
                 port = self.dp.ports[port_num]
                 ofmsgs.extend(self.acl_manager.cold_start_port(port))
+        if added_vids:
+            added_vlans = [self.dp.vlans[vid] for vid in added_vids]
+            ofmsgs.extend(self.add_vlans(added_vlans, cold_start=True))
         if changed_vids:
-            changed_vlans = [self.dp.vlans[vid] for vid in changed_vids]
-            # TODO: handle change versus add separately so can avoid delete first.
-            ofmsgs.extend(self.del_vlans(changed_vlans))
-            # The proceeding delete operation means we don't have to generate more deletes.
-            ofmsgs.extend(self.add_vlans(changed_vlans, cold_start=True))
+            changed_vlans = {self.dp.vlans[vid] for vid in changed_vids}
+            ofmsgs.extend(self.add_vlans(changed_vlans, cold_start=False))
+
+            routed_vlans = set()
+            for changed_vlan in changed_vlans:
+                if len(changed_vlan.faucet_vips) == 0:
+                    continue
+                if self.dp.routers:
+                    for router in self.dp.routers.values():
+                        if changed_vlan in router.vlans:
+                            routed_vlans.update(router.vlans)
+            routed_vlans -= changed_vlans
+            for vlan in routed_vlans:
+                for route_manager in self._route_manager_by_ipv.values():
+                    ofmsgs.extend(route_manager.expire_vlan_nexthops(vlan))
         if self.stack_manager:
             ofmsgs.extend(self.stack_manager.add_tunnel_acls())
         return restart_type, ofmsgs
