@@ -2817,12 +2817,11 @@ dbs:
         for i, controller in enumerate(self.faucet_controllers):
             cont_name = controller.name
             start_configure_count = start_configure_counts[i]
-            for i in range(timeout * 4):
+            for _ in range(timeout * 4):
                 configure_count = self.get_configure_count(controller=cont_name)
                 if configure_count > start_configure_count:
                     break
-                if i < (timeout * 4 - 1):
-                    time.sleep(0.25)
+                time.sleep(0.25)
             self.assertNotEqual(
                 start_configure_count,
                 configure_count,
