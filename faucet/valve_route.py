@@ -522,9 +522,10 @@ class ValveRouteManager(ValveManagerBase):
             ofmsgs.extend(
                 self._add_faucet_fib_to_vip(vlan, priority, faucet_vip, faucet_vip_host)
             )
+        routed_vlans = self._routed_vlans(vlan)
         if not cold_start and not self.global_routing:
-            for routed_vlan in self._routed_vlans(vlan):
-                if routed_vlan == vlan:
+            for routed_vlan in routed_vlans:
+                if routed_vlan == vlan or isinstance(routed_vlan, AnonVLAN):
                     continue
                 for faucet_vip in routed_vlan.faucet_vips_by_ipv(self.IPV):
                     learn_connected_priority = (
