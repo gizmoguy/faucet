@@ -525,10 +525,12 @@ class ValveRouteManager(ValveManagerBase):
                 if routed_vlan == vlan or isinstance(routed_vlan, AnonVLAN):
                     continue
                 for faucet_vip in routed_vlan.faucet_vips_by_ipv(self.IPV):
-                    learn_connected_priority = (
-                        self.route_priority + faucet_vip.network.prefixlen
-                    )
                     if self.proactive_learn and not faucet_vip.ip.is_link_local:
+                        # When warm starting, reinstall FIB routes for faucet VIP subnets
+                        # of other vlans in the same router as this vlan
+                        learn_connected_priority = (
+                            self.route_priority + faucet_vip.network.prefixlen
+                        )
                         ofmsgs.append(
                             self.fib_table.flowmod(
                                 self._route_match(vlan, faucet_vip),
@@ -536,7 +538,6 @@ class ValveRouteManager(ValveManagerBase):
                                 inst=(self.fib_table.goto(self.vip_table),),
                             )
                         )
-
         return ofmsgs
 
     def del_vlan(self, vlan, dp_vlans):
