@@ -1684,7 +1684,7 @@ class Valve:
             routed_vlans = set()
             for changed_vlan in changed_vlans:
                 if len(changed_vlan.faucet_vips) == 0:
-                    # Routing not configured for VLAN
+                    # VLAN not configured for routing
                     continue
                 if self.dp.routers:
                     for router in self.dp.routers.values():
