@@ -323,6 +323,7 @@ class ValveRouteManager(ValveManagerBase):
         return vlan.neigh_cache_by_ipv(self.IPV)
 
     def _expire_nexthops(self, now, vlan, dead_nexthops):
+        """Expire list of next hops for a vlan"""
         ofmsgs = []
         for ip_gw, nexthop_cache_entry in dead_nexthops:
             self.logger.info(
@@ -540,17 +541,13 @@ class ValveRouteManager(ValveManagerBase):
                         )
         return ofmsgs
 
-    def del_vlan(self, vlan, dp_vlans):
-        """Delete a VLAN."""
+    def del_faucet_mac(self, faucet_mac, dp_vlans):
+        """Delete flows associated with a given faucet mac"""
         ofmsgs = []
-        if not vlan.faucet_vips_by_ipv:
-            return ofmsgs
-
-        ofmsgs.append(self.fib_table.flowdel(match=self.fib_table.match(vlan=vlan)))
+        max_prefixlen = 32 if self.IPV == 4 else 128
 
         dp_macs = set()
         dp_mac_global_vip_present = {}
-
         for dp_vlan in dp_vlans:
             if dp_vlan.faucet_vips_by_ipv(self.IPV):
                 dp_macs.add(dp_vlan.faucet_mac)
@@ -561,22 +558,22 @@ class ValveRouteManager(ValveManagerBase):
                         dp_mac_global_vip_present[dp_vlan.faucet_mac] = True
                         break
 
-        max_prefixlen = 32 if self.IPV == 4 else 128
-
-        if vlan.faucet_mac not in dp_macs:
+        if faucet_mac not in dp_macs:
+            # faucet mac is no longer used by any vlan on dp
             for eth_type in self.CONTROL_ETH_TYPES:
                 ofmsgs.append(
                     self.vip_table.flowdel(
                         match=self.vip_table.match(
-                            eth_dst=vlan.faucet_mac, eth_type=eth_type
+                            eth_dst=faucet_mac, eth_type=eth_type
                         )
                     )
                 )
-        elif not dp_mac_global_vip_present[vlan.faucet_mac]:
+        elif not dp_mac_global_vip_present[faucet_mac]:
+            # faucet mac remains active on dp, but only used by link-local vip
             ofmsgs.append(
                 self.vip_table.flowdel(
                     match=self.vip_table.match(
-                        eth_dst=vlan.faucet_mac,
+                        eth_dst=faucet_mac,
                         eth_type=self.ETH_TYPE,
                         nw_proto=self.ICMP_TYPE,
                     ),
@@ -587,7 +584,7 @@ class ValveRouteManager(ValveManagerBase):
             ofmsgs.append(
                 self.vip_table.flowdel(
                     match=self.vip_table.match(
-                        eth_dst=vlan.faucet_mac,
+                        eth_dst=faucet_mac,
                         eth_type=self.ETH_TYPE,
                     ),
                     priority=self.route_priority + max_prefixlen - 3,
@@ -596,6 +593,7 @@ class ValveRouteManager(ValveManagerBase):
             )
 
         if True not in dp_mac_global_vip_present.values():
+            # no global scope vips left on dp
             ofmsgs.append(
                 self.vip_table.flowdel(
                     match=self.vip_table.match(
@@ -612,38 +610,77 @@ class ValveRouteManager(ValveManagerBase):
                     strict=True,
                 )
             )
+        return ofmsgs
 
+    def del_faucet_vip(self, vlan, faucet_vip, dp_faucet_vips, dp_faucet_vip_hosts):
+        """Delete flows associated with a given faucet vip"""
+        ofmsgs = []
+        if self.global_routing:
+            faucet_vip_host = self._host_from_faucet_vip(faucet_vip)
+            if faucet_vip_host not in dp_faucet_vip_hosts:
+                # faucet vip host route no longer in use on dp
+                ofmsgs.append(
+                    self.fib_table.flowdel(
+                        match=self._route_match(self.global_vlan, faucet_vip_host)
+                    )
+                )
+            if (
+                self.proactive_learn
+                and not faucet_vip.ip.is_link_local
+                and faucet_vip not in dp_faucet_vips
+            ):
+                # faucet vip no longer in use on dp
+                ofmsgs.append(
+                    self.fib_table.flowdel(
+                        match=self._route_match(self.global_vlan, faucet_vip)
+                    )
+                )
+            return ofmsgs
+        if self.proactive_learn and not faucet_vip.ip.is_link_local:
+            routed_vlans = self._routed_vlans(vlan)
+            router_faucet_vips = set()
+            for routed_vlan in routed_vlans:
+                if routed_vlan == vlan:
+                    continue
+                router_faucet_vips.update(routed_vlan.faucet_vips)
+            if faucet_vip not in router_faucet_vips:
+                for routed_vlan in routed_vlans:
+                    # faucet vip no longer in use by any vlans in router
+                    ofmsgs.append(
+                        self.fib_table.flowdel(
+                            match=self._route_match(routed_vlan, faucet_vip)
+                        )
+                    )
+        return ofmsgs
+
+    def del_vlan(self, vlan, dp_vlans):
+        """Delete a VLAN."""
+        ofmsgs = []
+        if not vlan.faucet_vips_by_ipv:
+            return ofmsgs
+        ofmsgs.append(self.fib_table.flowdel(match=self.fib_table.match(vlan=vlan)))
+        ofmsgs.extend(self.del_faucet_mac(vlan.faucet_mac, dp_vlans))
+
+        # expire next hops for this vlan to remove static routes
+        # from fib of vlans in same router as this one
         self.expire_vlan_nexthops(vlan)
 
         dp_faucet_vips = set()
         dp_faucet_vip_hosts = set()
-        if self.global_routing:
+        if len(vlan.faucet_vips_by_ipv(self.IPV)) >= 1 and self.global_routing:
             for dp_vlan in dp_vlans:
                 for faucet_vip in dp_vlan.faucet_vips_by_ipv(self.IPV):
                     dp_faucet_vips.add(faucet_vip)
                     faucet_vip_host = self._host_from_faucet_vip(faucet_vip)
                     dp_faucet_vip_hosts.add(faucet_vip_host)
 
+
         for faucet_vip in vlan.faucet_vips_by_ipv(self.IPV):
-            if self.global_routing:
-                faucet_vip_host = self._host_from_faucet_vip(faucet_vip)
-                if faucet_vip_host not in dp_faucet_vip_hosts:
-                    ofmsgs.append(
-                        self.fib_table.flowdel(
-                            match=self._route_match(self.global_vlan, faucet_vip_host)
-                        )
-                    )
-
-            if self.proactive_learn and not faucet_vip.ip.is_link_local:
-                routed_vlans = self._routed_vlans(vlan)
-                for routed_vlan in routed_vlans:
-                    if faucet_vip not in dp_faucet_vips:
-                        ofmsgs.append(
-                            self.fib_table.flowdel(
-                                match=self._route_match(routed_vlan, faucet_vip)
-                            )
-                        )
-
+            ofmsgs.extend(
+                self.del_faucet_vip(
+                    vlan, faucet_vip, dp_faucet_vips, dp_faucet_vip_hosts
+                )
+            )
         return ofmsgs
 
     def _add_resolved_route(self, vlan, ip_gw, ip_dst, eth_dst, is_updated):
