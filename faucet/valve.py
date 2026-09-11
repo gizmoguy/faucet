@@ -1684,6 +1684,7 @@ class Valve:
             routed_vlans = set()
             for changed_vlan in changed_vlans:
                 if len(changed_vlan.faucet_vips) == 0:
+                    # Routing not configured for VLAN
                     continue
                 if self.dp.routers:
                     for router in self.dp.routers.values():
@@ -1691,7 +1692,13 @@ class Valve:
                             routed_vlans.update(router.vlans)
             routed_vlans -= changed_vlans
             for vlan in routed_vlans:
+                self.logger.info(
+                    "Expiring next hops for %s which is in the same router as a VLAN that changed configuration"
+                    % vlan
+                )
                 for route_manager in self._route_manager_by_ipv.values():
+                    # Expire next hop cache for vlans that are in the same router as a changed vlan
+                    # to force next hops to be relearned and repopulated in FIB of changed vlan
                     ofmsgs.extend(route_manager.expire_vlan_nexthops(vlan))
         if self.stack_manager:
             ofmsgs.extend(self.stack_manager.add_tunnel_acls())
