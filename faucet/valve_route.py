@@ -322,16 +322,8 @@ class ValveRouteManager(ValveManagerBase):
         """Return vlan neighbour cache"""
         return vlan.neigh_cache_by_ipv(self.IPV)
 
-    def expire_vlan_nexthops(self, vlan):
-        """Expire all hosts on a vlan"""
+    def _expire_nexthops(self, now, vlan, dead_nexthops):
         ofmsgs = []
-        now = time.time()
-        nexthop_cache = self._vlan_nexthop_cache(vlan)
-        dead_nexthops = [
-            (ip_gw, nexthop_cache_entry)
-            for ip_gw, nexthop_cache_entry in nexthop_cache.items()
-            if nexthop_cache_entry
-        ]
         for ip_gw, nexthop_cache_entry in dead_nexthops:
             self.logger.info(
                 "marking %s as a dead nexthop" % nexthop_cache_entry.eth_src
@@ -340,6 +332,17 @@ class ValveRouteManager(ValveManagerBase):
                 self._expire_gateway_flows(ip_gw, nexthop_cache_entry, vlan, now)
             )
         return ofmsgs
+
+    def expire_vlan_nexthops(self, vlan):
+        """Expire all hosts on a vlan"""
+        now = time.time()
+        nexthop_cache = self._vlan_nexthop_cache(vlan)
+        dead_nexthops = [
+            (ip_gw, nexthop_cache_entry)
+            for ip_gw, nexthop_cache_entry in nexthop_cache.items()
+            if nexthop_cache_entry
+        ]
+        return self._expire_nexthops(now, vlan, dead_nexthops)
 
     def expire_port_nexthops(self, port):
         """Expire all hosts on a port"""
@@ -354,13 +357,7 @@ class ValveRouteManager(ValveManagerBase):
                 and nexthop_cache_entry.port
                 and port.number == nexthop_cache_entry.port.number
             ]
-            for ip_gw, nexthop_cache_entry in dead_nexthops:
-                self.logger.info(
-                    "marking %s as a dead nexthop" % nexthop_cache_entry.eth_src
-                )
-                ofmsgs.extend(
-                    self._expire_gateway_flows(ip_gw, nexthop_cache_entry, vlan, now)
-                )
+            ofmsgs.extend(self._expire_nexthops(now, vlan, dead_nexthops))
         return ofmsgs
 
     def _vlan_nexthop_cache_entry(self, vlan, ip_gw):
